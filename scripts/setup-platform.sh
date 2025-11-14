@@ -4,7 +4,12 @@ set -euo pipefail
 LOG_DIR="logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/setup-$(date +%Y%m%d-%H%M%S).log"
-exec > >(tee -a "$LOG_FILE") 2>&1
+if [[ -d /dev/fd ]]; then
+  exec > >(tee -a "$LOG_FILE") 2>&1
+else
+  echo "Logging directly to $LOG_FILE (process substitution unavailable)"
+  exec >>"$LOG_FILE" 2>&1
+fi
 
 COLIMA_ARGS=(--vm-type vz --arch aarch64 --cpu 8 --memory 24 --disk 120 --mount-type virtiofs --runtime docker)
 CONTAINER_NAME="abe-dev"
