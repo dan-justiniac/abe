@@ -3,6 +3,20 @@
 ## Purpose
 ABE provides a ready-to-use Colima VM plus an Ubuntu container so every Codex agent has a consistent workspace. Follow the steps below before attempting repo work or dependency installs.
 
+## Quick Start (One Command)
+Prerequisites: install Colima (macOS only), Docker CLI, and run `codex login` once on the host so `~/.codex` exists. Then, from the repo root:
+
+```sh
+codex exec --sandbox workspace-write ./scripts/setup-platform.sh
+```
+
+The script starts (or verifies) Colima, pulls the published platform image, launches the long-lived `abe-dev` container with your host Codex credentials mounted, and records logs under `logs/setup-*.log`. When it finishes, run `docker exec -it abe-dev bash` to enter the environment.
+
+## Platform Image
+- Registry tag: `danjustiniac/abe-platform:v0.0.1`.
+- Contents: Ubuntu 24.04, build-essential, Node.js 22 (NodeSource), git, and global `@openai/codex`.
+- Default command `sleep infinity`; all work happens via `docker exec abe-dev ...`.
+
 ## Colima VM
 1. Start Colima with generous resources (8 CPU / 24 GiB RAM / 120 GiB disk) and docker runtime:
    ```sh
@@ -23,33 +37,34 @@ ABE provides a ready-to-use Colima VM plus an Ubuntu container so every Codex ag
 2. Enter the container with `docker exec -it abe-dev bash`.
 3. Install tooling inside the container (apt update/upgrade, build-essential, git, pnpm, etc.) as required by the project.
 
-## Platform Bootstrap (abe-dev)
-Run these once per fresh container:
+## Platform Bootstrap (Manual)
+The automation covers everything, but if you need to diagnose or rebuild the container manually:
 
 ```sh
-docker exec abe-dev bash -lc 'apt-get update'
-docker exec abe-dev bash -lc "DEBIAN_FRONTEND=noninteractive apt-get install -y curl gnupg"
-docker exec abe-dev bash -lc 'curl -fsSL https://deb.nodesource.com/setup_22.x | bash -'
-docker exec abe-dev bash -lc "DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs make g++ python3"
+docker pull danjustiniac/abe-platform:v0.0.1
+docker run -d --name abe-dev --hostname abe-dev --restart unless-stopped \
+  -v "$HOME/.codex:/root/.codex" \
+  danjustiniac/abe-platform:v0.0.1
 ```
 
-Validate with `docker exec abe-dev bash -lc 'node -v && npm -v'` (expected `v22.21.0` / `10.9.4` or newer).
+Verify inside the container:
 
-## Codex CLI Inside the Platform
-1. Install Codex:
-   ```sh
-   docker exec abe-dev bash -lc 'npm install -g @openai/codex'
-   docker exec abe-dev bash -lc 'codex --version'  # expect codex-cli 0.58.0+
-   ```
-2. Authenticate once on the host (outside the container):
-   ```sh
-   codex login
-   docker cp ~/.codex/. abe-dev:/root/.codex
-   docker exec abe-dev bash -lc 'codex login status'
-   ```
-   The final command must print `Logged in using ChatGPT`.
+```sh
+docker exec abe-dev bash -lc 'node -v && npm -v'   # expect v22.21.0 / npm 10.9+
+docker exec abe-dev bash -lc 'codex login status'  # expect "Logged in using ChatGPT"
+```
+
+## Maintaining the Image
+The source lives in `platform/Dockerfile`. To publish a new version:
+
+```sh
+docker build -t danjustiniac/abe-platform:vNEXT -f platform/Dockerfile platform
+docker push danjustiniac/abe-platform:vNEXT
+```
+
+Update `scripts/setup-platform.sh` and this README with the new tag before committing.
 
 ## Tips
 - Keep the VM running for the entire session; stopping Colima tears down `abe-dev`.
 - Use bind mounts or `docker cp` to exchange files between macOS and the container.
-- When in doubt, inspect logs: `colima list`, `docker logs abe-dev`, and `/Users/dan/.colima/_lima/colima/serial.log`.
+- When in doubt, inspect logs: `logs/setup-*.log`, `colima list`, `docker logs abe-dev`, and `/Users/dan/.colima/_lima/colima/serial.log`.
