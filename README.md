@@ -7,10 +7,12 @@ ABE provides a ready-to-use Colima VM plus an Ubuntu container so every Codex ag
 Prerequisites: install Colima (macOS only), Docker CLI, and run `codex login` once on the host so `~/.codex` exists. Then, from the repo root:
 
 ```sh
-codex exec --sandbox workspace-write ./scripts/setup-platform.sh
+git clone git@github.com:dan-justiniac/abe.git
+cd abe
+./scripts/setup-platform.sh
 ```
 
-The script starts (or verifies) Colima, pulls the published platform image, launches the long-lived `abe-dev` container with your host Codex credentials mounted, and records logs under `logs/setup-*.log`. When it finishes, run `docker exec -it abe-dev bash` to enter the environment.
+The script starts (or verifies) Colima, pulls the published platform image, launches the long-lived `abe-dev` container with your host Codex credentials mounted, and records logs under `logs/setup-*.log`. It ends by running a non-interactive `codex exec --sandbox workspace-write --add-dir ~/.colima -- "echo …"` so you see a welcome message confirming the platform is ready. After it finishes, run `docker exec -it abe-dev bash` to enter the environment. Subsequent Codex sessions should include `--add-dir ~/.colima` so the agent can manage Colima (example: `codex exec --sandbox workspace-write --add-dir ~/.colima -- 'pwd'`).
 
 ## Platform Image
 - Registry tag: `danjustiniac/abe-platform:v0.0.1`.

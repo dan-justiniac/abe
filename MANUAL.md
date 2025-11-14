@@ -9,14 +9,14 @@
 ```bash
 git clone git@github.com:dan-justiniac/abe.git
 cd abe
-codex exec --sandbox workspace-write ./scripts/setup-platform.sh
+./scripts/setup-platform.sh
 ```
 
 The script automatically:
-- Starts Colima (macOS) with 8 CPU / 24 GiB RAM / 120 GiB disk.
+- Starts/validates Colima (macOS) with 8 CPU / 24 GiB RAM / 120 GiB disk.
 - Pulls `danjustiniac/abe-platform:v0.0.1`.
 - Creates/starts the `abe-dev` container with your host `~/.codex` mounted read-only.
-- Verifies `codex login status` inside the container.
+- Runs `codex exec --sandbox workspace-write --add-dir ~/.colima -- "printf 'Welcome…'"` so you see a Codex welcome message when the platform is ready.
 - Writes a log to `logs/setup-<timestamp>.log`.
 
 ## Daily Workflow
@@ -26,6 +26,10 @@ The script automatically:
    docker exec -it abe-dev bash
    ```
 3. Run development commands inside the shell (Node 22 + Codex CLI are preinstalled).
+4. When launching Codex manually, include `--add-dir ~/.colima`, e.g.:
+   ```bash
+   codex exec --sandbox workspace-write --add-dir ~/.colima -- 'pwd'
+   ```
 
 ## Troubleshooting
 - **`codex login status` fails inside container**: rerun `codex login` on the host to refresh `~/.codex`, then rerun the bootstrap script.

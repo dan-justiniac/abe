@@ -5,7 +5,14 @@ LOG_DIR="logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/setup-$(date +%Y%m%d-%H%M%S).log"
 if [[ -d /dev/fd ]]; then
+  set +e
   exec > >(tee -a "$LOG_FILE") 2>&1
+  tee_status=$?
+  set -e
+  if [[ $tee_status -ne 0 ]]; then
+    echo "Process substitution unavailable (permission denied). Logging directly to $LOG_FILE"
+    exec >>"$LOG_FILE" 2>&1
+  fi
 else
   echo "Logging directly to $LOG_FILE (process substitution unavailable)"
   exec >>"$LOG_FILE" 2>&1
@@ -38,12 +45,41 @@ OS="$(uname -s)"
 if [[ "$OS" == "Darwin" ]]; then
   require_cmd colima
   announce "Ensuring Colima is running"
-  if ! colima status >/dev/null 2>&1; then
-    colima start "${COLIMA_ARGS[@]}"
-  fi
 else
   announce "Non-macOS host detected ($OS). Assuming docker is already running."
 fi
+
+handle_colima_error() {
+  local message="$1"
+  if grep -qi "operation not permitted" <<<"$message"; then
+    error "Colima requires access to $HOME/.colima. Run this script directly on the host or launch Codex with '--add-dir $HOME/.colima'. Original error: $message"
+  fi
+  printf '%s\n' "$message" >&2
+  error "Colima command failed"
+}
+
+ensure_colima_running() {
+  if [[ "$OS" != "Darwin" ]]; then
+    return
+  fi
+
+  local status_output
+  if status_output=$(colima status 2>&1); then
+    return
+  fi
+
+  if ! grep -qi "is not running" <<<"$status_output"; then
+    handle_colima_error "$status_output"
+  fi
+
+  announce "Starting Colima with required resources"
+  local start_output
+  if ! start_output=$(colima start "${COLIMA_ARGS[@]}" 2>&1); then
+    handle_colima_error "$start_output"
+  fi
+}
+
+ensure_colima_running
 
 announce "Waiting for Docker daemon"
 for i in {1..30}; do
@@ -116,4 +152,10 @@ announce "Verifying container Codex login status"
 run_in_container "codex login status"
 
 announce "Platform ready. Container '$CONTAINER_NAME' is running $PLATFORM_IMAGE"
+
+announce "Launching Codex welcome check"
+if ! codex --sandbox workspace-write --add-dir "$HOME/.colima" exec -- "printf 'Welcome to ABE! Colima and abe-dev are ready. Next step: docker exec -it abe-dev bash\n'"; then
+  echo "Codex welcome check failed. Run 'codex --sandbox workspace-write --add-dir \"$HOME/.colima\" exec -- echo \"ABE ready\"' manually if needed."
+fi
+
 announce "Logs saved to $LOG_FILE"

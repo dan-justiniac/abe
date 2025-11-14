@@ -6,7 +6,7 @@
 - Infrastructure assets: Colima VM config lives under `~/.colima`, while platform-specific notes belong in `docs/`. Keep application-level secrets in `.env.local` (gitignored) and share sanitized templates as `.env.example`.
 
 ## Build, Test, and Development Commands
-- `codex exec --sandbox workspace-write ./scripts/setup-platform.sh` — full bootstrap: Colima start (macOS), pulls `danjustiniac/abe-platform:v0.0.1`, launches `abe-dev`, and mounts host Codex credentials.
+- `./scripts/setup-platform.sh` — full bootstrap: start/verify Colima (macOS), pull `danjustiniac/abe-platform:v0.0.1`, launch `abe-dev`, mount host `~/.codex`, and run a Codex welcome check via `codex exec --add-dir ~/.colima`.
 - `docker exec -it abe-dev bash` — enter the long-lived Ubuntu container where all pnpm/npm commands must run.
 - Leave placeholders for future build/test scripts in `package.json`; when they exist, document them both here and in README.
 
@@ -23,6 +23,7 @@
 - P R checklist: describe intent, link issues or ADRs, attach screenshots/logs for UI or platform changes, confirm `pnpm run verify` + Codex smoke tests ran green, and note any remaining risks.
 
 ## Agent-Specific Instructions
-- Run `codex exec --sandbox workspace-write ./scripts/setup-platform.sh` at the start of each session; review `logs/setup-*.log` if anything fails.
+- Run `./scripts/setup-platform.sh` at the start of each session; review `logs/setup-*.log` if anything fails. The script ends by showing a Codex-powered welcome message.
 - Always verify Colima + `abe-dev` after the script: `colima status`, `docker ps`, `docker exec abe-dev bash -lc 'codex login status'`.
-- If host Codex auth breaks, run `codex login`, ensure `~/.codex` exists, then rerun the setup script (it mounts that directory automatically). Document any new bootstrap steps immediately in README.
+- When running Codex manually, include `--add-dir ~/.colima` so it can manage the VM (e.g., `codex exec --sandbox workspace-write --add-dir ~/.colima -- 'pwd'`).
+- If host Codex auth breaks, run `codex login`, ensure `~/.codex` exists, then rerun the setup script. Document any new bootstrap steps immediately in README.
