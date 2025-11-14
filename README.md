@@ -23,6 +23,32 @@ ABE provides a ready-to-use Colima VM plus an Ubuntu container so every Codex ag
 2. Enter the container with `docker exec -it abe-dev bash`.
 3. Install tooling inside the container (apt update/upgrade, build-essential, git, pnpm, etc.) as required by the project.
 
+## Platform Bootstrap (abe-dev)
+Run these once per fresh container:
+
+```sh
+docker exec abe-dev bash -lc 'apt-get update'
+docker exec abe-dev bash -lc "DEBIAN_FRONTEND=noninteractive apt-get install -y curl gnupg"
+docker exec abe-dev bash -lc 'curl -fsSL https://deb.nodesource.com/setup_22.x | bash -'
+docker exec abe-dev bash -lc "DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs make g++ python3"
+```
+
+Validate with `docker exec abe-dev bash -lc 'node -v && npm -v'` (expected `v22.21.0` / `10.9.4` or newer).
+
+## Codex CLI Inside the Platform
+1. Install Codex:
+   ```sh
+   docker exec abe-dev bash -lc 'npm install -g @openai/codex'
+   docker exec abe-dev bash -lc 'codex --version'  # expect codex-cli 0.58.0+
+   ```
+2. Authenticate once on the host (outside the container):
+   ```sh
+   codex login
+   docker cp ~/.codex/. abe-dev:/root/.codex
+   docker exec abe-dev bash -lc 'codex login status'
+   ```
+   The final command must print `Logged in using ChatGPT`.
+
 ## Tips
 - Keep the VM running for the entire session; stopping Colima tears down `abe-dev`.
 - Use bind mounts or `docker cp` to exchange files between macOS and the container.
