@@ -75,15 +75,18 @@ Update `scripts/setup-platform.sh` and this README with the new tag before commi
 
 ## Helper Scripts
 - `./scripts/run-in-platform.sh <cmd>` — Execute any command inside the running platform container (automatically `cd`'s to `/workspace`). Use this from the host to avoid repeating the bootstrap script; e.g. `./scripts/run-in-platform.sh ls`, `./scripts/run-in-platform.sh pnpm run lint`, or `./scripts/run-in-platform.sh codex exec --sandbox workspace-write -- 'pwd'`.
+- `./scripts/launch-worker.sh [--dir relative/path] [--prompt-file file | --prompt "text"] [--timeout seconds]` — Spawn a background Codex worker in the container. The script records metadata/logs/summaries under `platform/workers/`, immediately returns with a job ID, and never asks the user to approve in-container commands. Provide the task instructions via `--prompt` or by piping a file/stdin (use `--prompt-file -`). Optional `--timeout` stops the worker if it runs too long.
+- `./scripts/worker-status.sh [job-id] [--tail N | --log | --json]` — Inspect the worker registry, check whether a job is running/completed, and read the stored logs (defaults to tailing the last 20 lines when inspecting a specific job).
+- `./scripts/kill-worker.sh <job-id> [--force]` — Send SIGTERM (or SIGKILL with `--force`) to a running worker and mark it as failed.
+- `./scripts/collect-worker-report.sh <job-id>` — Print the worker’s prompt, summary, latest log lines, and git status/diff for the workspace.
+- `./scripts/reset-platform.sh` — Clean `workspace-projects/` and `platform/workers/`, then rerun `setup-platform.sh` to start fresh before a smoke test.
 - `./scripts/platform-codex.sh [--dir relative/path] [Codex args…]` — Launch a Codex session _inside_ `abe-dev`, defaulting to the repo-relative folder `workspace-projects`. Pass `--dir workspace-projects/other-repo` to target a specific checkout (the script creates the directory if it does not exist) and append any Codex flags/prompts after `--`. The script automatically ensures the container is running, `cd`s into the requested path, and starts Codex with sandbox write access so the in-platform agent can work at higher privilege.
 
 ## Working on Other Repositories
 - Clone or mount external repos under `workspace-projects/` (ignored by git) so the top-level Codex keeps this repo clean while the in-platform Codex focuses on the other project.
-- Use `./scripts/run-in-platform.sh 'cd workspace-projects && git clone <repo>'` (or any other command) to prepare those directories from the host without entering the container manually.
-- Kick off an in-platform agent targeted at a specific repo via `./scripts/platform-codex.sh --dir workspace-projects/<repo-name>`; append additional Codex arguments after `--` if you need non-default behavior, e.g.:
-  ```sh
-  ./scripts/platform-codex.sh --dir workspace-projects/sample-repo -- exec --sandbox workspace-write -- 'ls'
-  ```
+- Use `./scripts/run-in-platform.sh 'cd workspace-projects && git clone <repo>'` (or equivalent) to prepare those directories from the host without entering the container manually.
+- Launch a worker for a specific repo with `./scripts/launch-worker.sh --dir workspace-projects/<repo-name> --prompt-file instructions.txt` (or pipe the prompt via stdin). The helper records job metadata under `platform/workers/` and returns instantly with a job ID.
+- Monitor or tail the worker logs any time using `./scripts/worker-status.sh <job-id>` (add `--tail 40` for longer transcripts) or `./scripts/collect-worker-report.sh <job-id>` for a full summary. Use `./scripts/kill-worker.sh <job-id>` if you need to stop a stuck worker.
 - Keep this top-level Codex focused on maintaining ABE (docs, scripts, platform image). Let the in-platform Codex run the higher-privilege workflows for other repos once they live under `workspace-projects/`.
 
 ## Ideal Agent Workflow
@@ -93,11 +96,13 @@ These are the expected steps once Colima, Docker, and `codex login` prerequisite
 2. **Select the target repository** — Ask the user which GitHub repo to work on. Use `./scripts/run-in-platform.sh "cd workspace-projects && git clone <repo>"` (or equivalent) to ensure the repo (and any additional workspaces) live under `workspace-projects/`.
 3. **Define the task** — Collaborate with the user until the scope is clear. Capture requirements in the host session so you can guide the worker agent.
 4. **Prepare the workspace** — Inside `workspace-projects/<repo>`, run any bootstrapping commands (install deps, configure env files, etc.) using `./scripts/run-in-platform.sh`.
-5. **Launch the worker Codex** — Start a high-privilege agent inside the container with `./scripts/platform-codex.sh --dir workspace-projects/<repo>` (append additional Codex args/prompts after `--` as needed). This agent owns the actual repo work.
-6. **Monitor & adjust** — Keep the host Codex session available to relay user feedback, inspect progress (`./scripts/run-in-platform.sh ...`), and restart worker sessions if required.
-7. **Verify & report** — Once the worker finishes, run validation commands from the host or inside the container, review diffs/tests, and summarize results plus follow-ups back to the user.
+5. **Launch the worker Codex** — Run `./scripts/launch-worker.sh --dir workspace-projects/<repo> --prompt-file prompt.md --timeout 600` (or pipe the prompt via stdin). The script spawns the worker asynchronously, writes logs/summaries under `platform/workers/`, and returns immediately with a job ID so the host Codex can continue interacting with the user.
+6. **Monitor & adjust** — Use `./scripts/worker-status.sh <job-id>` or `./scripts/collect-worker-report.sh <job-id>` to answer “status?” on demand. Restart/stop workers via `launch-worker.sh` or `kill-worker.sh` as needed; the host session stays free for conversation instead of blocking.
+7. **Verify & report** — Once the worker reports `completed` (or `failed`), run validation commands from the host or inside the container, review diffs/tests, and summarize results plus follow-ups back to the user. Include references to worker logs or artifacts stored in `platform/workers/` when useful.
 
 ## Tips
 - Keep the VM running for the entire session; stopping Colima tears down `abe-dev`.
 - Use bind mounts or `docker cp` to exchange files between macOS and the container.
 - When in doubt, inspect logs: `logs/setup-*.log`, `colima list`, `docker logs abe-dev`, and `/Users/dan/.colima/_lima/colima/serial.log`.
+- The setup script now verifies outbound HTTPS access from inside the container. If it fails, unblock networking (e.g., ensure Colima has an Internet connection) before continuing.
+- Port bindings to `0.0.0.0` are restricted inside the sandbox. When verifying servers, bind to `127.0.0.1` or rely on unit tests instead.

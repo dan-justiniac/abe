@@ -10,11 +10,13 @@ This file is for the Codex agent that maintains the ABE platform repository itse
 ## Daily Flow
 1. Run `./scripts/setup-platform.sh` (see `README.md` → Quick Start) or confirm `platform/state.json` already exists.
 2. Verify Colima/Docker/Codex per `README.md` (“Verification Commands”) before editing files.
-3. Use `./scripts/run-in-platform.sh <cmd>` when you need to run shell commands inside `abe-dev` but stay on the host. The script is documented in `README.md` (“Helper Scripts”).
+3. Use `./scripts/run-in-platform.sh <cmd>` for any prep inside `abe-dev` (cloning into `workspace-projects/`, installing deps, etc.). For compound commands, pass `-- "cd workspace-projects && git clone …"`.
+4. When delegating work, launch a worker with `./scripts/launch-worker.sh --dir workspace-projects/<repo> --prompt-file prompt.md --timeout 600` (or pipe instructions via stdin). The helper records logs/summaries under `platform/workers/` and returns immediately with a job ID so the user keeps control of the host session.
+5. Answer “status?” questions via `./scripts/worker-status.sh <job-id>` (now shows the last log lines automatically) or `./scripts/collect-worker-report.sh <job-id>`. Use `./scripts/kill-worker.sh <job-id>` if a worker is stuck.
 
 ## Nested Codex Sessions
 - External repositories should live under `workspace-projects/` (ignored by git).
-- Launch the higher-privilege agent inside the container via `./scripts/platform-codex.sh --dir workspace-projects/<repo>`; see `README.md` (“Working on Other Repositories”) for details.
+- Prefer the asynchronous workflow: `launch-worker.sh` to start jobs, `worker-status.sh` / `collect-worker-report.sh` to monitor them, `kill-worker.sh` to stop them. Use `./scripts/platform-codex.sh` only when you need an interactive shell inside the container.
 - The top-level Codex should only touch this repo unless specifically asked to inspect the other workspace.
 
 ## Coding & Process Notes

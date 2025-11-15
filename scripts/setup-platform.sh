@@ -10,6 +10,8 @@ STATE_FILE="$REPO_ROOT/platform/state.json"
 mkdir -p "$(dirname "$STATE_FILE")"
 WORKSPACES_DIR="$REPO_ROOT/workspace-projects"
 mkdir -p "$WORKSPACES_DIR"
+WORKERS_DIR="$REPO_ROOT/platform/workers"
+mkdir -p "$WORKERS_DIR"
 if [[ -d /dev/fd ]]; then
   set +e
   exec > >(tee -a "$LOG_FILE") 2>&1
@@ -169,6 +171,13 @@ run_in_container() {
   docker exec "$CONTAINER_NAME" bash -lc "$1"
 }
 
+check_container_network() {
+  announce "Checking container outbound network access"
+  if ! run_in_container "curl -sSf https://registry.npmjs.org/-/ping >/dev/null"; then
+    error "Container '$CONTAINER_NAME' cannot reach npmjs.org. Ensure Colima networking is enabled and rerun the setup."
+  fi
+}
+
 write_state_file() {
   cat >"$STATE_FILE" <<EOF
 {
@@ -183,6 +192,10 @@ EOF
 
 announce "Verifying container Codex login status"
 run_in_container "codex login status"
+
+run_in_container "git config --global --add safe.directory '*' >/dev/null 2>&1 || true"
+
+check_container_network
 
 announce "Platform ready. Container '$CONTAINER_NAME' is running $PLATFORM_IMAGE"
 

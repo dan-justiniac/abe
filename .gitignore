@@ -6,4 +6,5 @@ node_modules/
 .colima/
 logs/
 platform/state.json
+platform/workers/
 workspace-projects/
