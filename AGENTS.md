@@ -1,29 +1,22 @@
-# Repository Guidelines
+# Agent Guide (Top-Level Codex)
 
-## Project Structure & Module Organization
-- Root hosts environment docs (`README.md`) and this guide. Future source code should live under `src/`, tests in `tests/`, and automation scripts in `scripts/` (create them as work begins).
-- `platform/Dockerfile` defines the published dev image (`danjustiniac/abe-platform:v0.0.1`). Update it plus docs when bumping Node/Codex versions.
-- Infrastructure assets: Colima VM config lives under `~/.colima`, while platform-specific notes belong in `docs/`. Keep application-level secrets in `.env.local` (gitignored) and share sanitized templates as `.env.example`.
+This file is for the Codex agent that maintains the ABE platform repository itself. All canonical operational instructions live in `README.md`; refer to that doc for the latest bootstrap steps, helper scripts, and workflows. Use this guide as a quick checklist so you can get to work immediately.
 
-## Build, Test, and Development Commands
-- `./scripts/setup-platform.sh` — full bootstrap: start/verify Colima (macOS), pull `danjustiniac/abe-platform:v0.0.1`, launch `abe-dev`, mount host `~/.codex`, and run a Codex welcome check via `codex exec --add-dir ~/.colima`.
-- `docker exec -it abe-dev bash` — enter the long-lived Ubuntu container where all pnpm/npm commands must run.
-- Leave placeholders for future build/test scripts in `package.json`; when they exist, document them both here and in README.
+## Responsibilities
+- Keep `platform/`, `scripts/`, and `README.md` healthy so humans and nested agents can spin up the environment without friction.
+- Leave application code for the Codex agent that runs _inside_ the platform container (see “Nested Codex Sessions” below).
+- Record any new bootstrap requirements only once (in `README.md`). Update this guide if the expectations for the top-level agent change.
 
-## Coding Style & Naming Conventions
-- Default to TypeScript/JavaScript with 2-space indentation, Prettier defaults (semi: false, singleQuote: true, trailingComma: all, printWidth: 100) as per `prettier.config.js` once added.
-- Name directories and files using kebab-case (e.g., `chat-server`, `app-shell.tsx`). Environment files follow `.env.<target>`.
+## Daily Flow
+1. Run `./scripts/setup-platform.sh` (see `README.md` → Quick Start) or confirm `platform/state.json` already exists.
+2. Verify Colima/Docker/Codex per `README.md` (“Verification Commands”) before editing files.
+3. Use `./scripts/run-in-platform.sh <cmd>` when you need to run shell commands inside `abe-dev` but stay on the host. The script is documented in `README.md` (“Helper Scripts”).
 
-## Testing Guidelines
-- Adopt Vitest for unit/integration coverage when code arrives. Place package-specific tests next to source (`src/foo.test.ts`) and workspace-wide fixtures in `tests/`.
-- Standard command: `pnpm run test` (wraps `test:unit` and `test:integration`). Require a seeded Postgres (`just chat-db`) for integration once databases appear.
+## Nested Codex Sessions
+- External repositories should live under `workspace-projects/` (ignored by git).
+- Launch the higher-privilege agent inside the container via `./scripts/platform-codex.sh --dir workspace-projects/<repo>`; see `README.md` (“Working on Other Repositories”) for details.
+- The top-level Codex should only touch this repo unless specifically asked to inspect the other workspace.
 
-## Commit & Pull Request Guidelines
-- Commit messages follow `type: summary` (e.g., `docs: record platform setup`, `feat: add chat renderer`). Keep each commit scoped and linted (`pnpm run verify`).
-- P R checklist: describe intent, link issues or ADRs, attach screenshots/logs for UI or platform changes, confirm `pnpm run verify` + Codex smoke tests ran green, and note any remaining risks.
-
-## Agent-Specific Instructions
-- Run `./scripts/setup-platform.sh` at the start of each session; review `logs/setup-*.log` if anything fails. The script ends by showing a Codex-powered welcome message.
-- Always verify Colima + `abe-dev` after the script: `colima status`, `docker ps`, `docker exec abe-dev bash -lc 'codex login status'`.
-- When running Codex manually, include `--add-dir ~/.colima` so it can manage the VM (e.g., `codex exec --sandbox workspace-write --add-dir ~/.colima -- 'pwd'`).
-- If host Codex auth breaks, run `codex login`, ensure `~/.codex` exists, then rerun the setup script. Document any new bootstrap steps immediately in README.
+## Coding & Process Notes
+- Source layout, testing defaults, and commit conventions match the sections in `README.md`. Follow those instructions when adding new code or docs.
+- Keep this guide concise. If a new process emerges, update `README.md` first, then summarize or link to it here.

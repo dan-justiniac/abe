@@ -4,6 +4,12 @@ set -euo pipefail
 LOG_DIR="logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/setup-$(date +%Y%m%d-%H%M%S).log"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+STATE_FILE="$REPO_ROOT/platform/state.json"
+mkdir -p "$(dirname "$STATE_FILE")"
+WORKSPACES_DIR="$REPO_ROOT/workspace-projects"
+mkdir -p "$WORKSPACES_DIR"
 if [[ -d /dev/fd ]]; then
   set +e
   exec > >(tee -a "$LOG_FILE") 2>&1
@@ -104,11 +110,15 @@ fi
 announce "Pulling platform image $PLATFORM_IMAGE"
 docker pull "$PLATFORM_IMAGE"
 
+container_exists=false
 current_label=""
 current_image=""
+current_repo_mount=""
 if docker ps -a --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+  container_exists=true
   current_label="$(docker inspect -f "{{ index .Config.Labels \"$IMAGE_LABEL_KEY\" }}" "$CONTAINER_NAME" 2>/dev/null || echo "")"
   current_image="$(docker inspect -f '{{ .Config.Image }}' "$CONTAINER_NAME" 2>/dev/null || echo "")"
+  current_repo_mount="$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/workspace" }}{{ .Source }}{{ end }}{{ end }}' "$CONTAINER_NAME" 2>/dev/null || echo "")"
 fi
 
 if [[ "$current_label" == "<no value>" ]]; then
@@ -127,6 +137,15 @@ if [[ -n "$current_image" && "$current_image" != "$PLATFORM_IMAGE" ]]; then
   docker rm -f "$CONTAINER_NAME"
   current_label=""
   current_image=""
+  current_repo_mount=""
+fi
+
+if [[ "$container_exists" == true && "$current_repo_mount" != "$REPO_ROOT" ]]; then
+  announce "Container repo mount ($current_repo_mount) differs from $REPO_ROOT. Recreating..."
+  docker rm -f "$CONTAINER_NAME"
+  current_label=""
+  current_image=""
+  current_repo_mount=""
 fi
 
 announce "Ensuring container '$CONTAINER_NAME' exists"
@@ -135,7 +154,9 @@ if [[ -z "$current_label" ]]; then
     --hostname "$CONTAINER_NAME" \
     --restart unless-stopped \
     --label "$IMAGE_LABEL_KEY=$PLATFORM_IMAGE" \
+    -v "$REPO_ROOT:/workspace" \
     -v "$HOME/.codex:/root/.codex" \
+    -w /workspace \
     "$PLATFORM_IMAGE"
 fi
 
@@ -148,6 +169,18 @@ run_in_container() {
   docker exec "$CONTAINER_NAME" bash -lc "$1"
 }
 
+write_state_file() {
+  cat >"$STATE_FILE" <<EOF
+{
+  "container": "$CONTAINER_NAME",
+  "repo_root": "$REPO_ROOT",
+  "platform_image": "$PLATFORM_IMAGE",
+  "log_file": "$LOG_FILE",
+  "generated_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+}
+EOF
+}
+
 announce "Verifying container Codex login status"
 run_in_container "codex login status"
 
@@ -157,5 +190,7 @@ announce "Launching Codex welcome check"
 if ! codex --sandbox workspace-write --add-dir "$HOME/.colima" exec -- "printf 'Welcome to ABE! Colima and abe-dev are ready. Next step: docker exec -it abe-dev bash\n'"; then
   echo "Codex welcome check failed. Run 'codex --sandbox workspace-write --add-dir \"$HOME/.colima\" exec -- echo \"ABE ready\"' manually if needed."
 fi
+
+write_state_file
 
 announce "Logs saved to $LOG_FILE"
